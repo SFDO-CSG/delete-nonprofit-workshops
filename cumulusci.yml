@@ -1,0 +1,129 @@
+minimum_cumulusci_version: '3.54.0'
+project:
+    name: nonprofit-workshops
+    package:
+        name: nonprofit-workshops
+        api_version: '52.0'
+    dependencies:
+        - github: 'https://github.com/SalesforceFoundation/NPSP'
+        - github: 'https://github.com/SalesforceFoundation/PMM'
+    git:
+        default_branch: 'main'
+    source_format: sfdx
+
+sources:
+    npsp:
+        github: https://github.com/SalesforceFoundation/NPSP
+
+tasks:
+    deploy_dev_config:
+        description: Deploys the post-install configuration for an unmanaged DE org
+        class_path: cumulusci.tasks.salesforce.Deploy
+        options:
+            path: unpackaged/config/dev
+    
+    deploy_reports:
+        description: Deploys reports & dashboards
+        class_path: cumulusci.tasks.salesforce.Deploy
+        options:
+            path: unpackaged/config/reports
+            namespace_inject: $project_config.project__package__namespace
+
+    deploy_dev_config_delete:
+        description: Deploys the metadata deletions for the post-install DE org config
+        class_path: cumulusci.tasks.salesforce.Deploy
+        options:
+            path: unpackaged/config/delete
+
+    robot:
+        options:
+            suites: robot/nonprofit-workshops/tests
+            options:
+                outputdir: robot/nonprofit-workshops/results
+
+    robot_testdoc:
+        options:
+            path: robot/nonprofit-workshops/tests
+            output: robot/nonprofit-workshops/doc/nonprofit-workshops_tests.html
+
+    run_tests:
+        options:
+            required_org_code_coverage_percent: 75
+
+#    update_admin_profile:
+#        options:
+#            package_xml: lib/admin_profile.xml
+#            record_types:
+#                - record_type: Account.HH_Account
+#                - record_type: Account.Organization
+#                  default: true
+#                  person_account_default: true
+#                - record_type: Opportunity.NPSP_Default
+#                  default: true
+#
+#    npsp_default_settings:
+#        description: Configure the default NPSP Settings including Membership RecordType
+#        class_path: cumulusci.tasks.apex.anon.AnonymousApexTask
+#        options:
+#            path: scripts/configure_npsp_default_settings.cls
+#            apex: initializeNPSPSettings();
+
+    enable_customizable_rollups:
+        description: Enable the NPSP Customizable Rollups feature (unmanaged deploys only)
+        class_path: cumulusci.tasks.apex.anon.AnonymousApexTask
+        options:
+            apex: new STG_PanelCustomizableRollup_CTRL().enableCRLPs();
+
+    enable_incremental_rollups:
+        description: Configure NPSP Customizable Rollups to activate Incremental Rollups (unmanaged deploys only)
+        class_path: cumulusci.tasks.apex.anon.AnonymousApexTask
+        options:
+            apex: >
+                STG_SettingsService.stgService.stgCRLP.AccountHardCreditNonSkew_Incremental__c = true;
+                STG_SettingsService.stgService.stgCRLP.ContactHardCreditNonSkew_Incremental__c = true;
+                STG_SettingsService.stgService.saveAll();
+
+flows:
+    config_dev:
+        steps:
+            3:
+                task: deploy_dev_config
+#            4:
+#                task: npsp_default_settings
+
+plans:
+    new_org:
+        slug: nonprofit-workshops
+        title: Install NPSP and PMM for nonprofit and general workshops
+        
+        steps:
+            1:
+                task: update_dependencies
+            2:
+                task: deploy
+                options:
+                    path: unpackaged/pre/account_record_types
+                ui_options:
+                    name: Account Record Types
+            3:
+                task: install_managed
+            4:
+                flow: config_managed
+                options:
+                    deploy_reports:
+                        unmanaged: False
+                ui_options:
+                    deploy_post:
+                        first:
+                            name: NPSP Config for Salesforce Mobile App
+                    deploy_dev_config_delete:
+                        name: Delete Developer Edition Sample Profiles
+                        description: This deletes sample page layouts and profiles intended for Sales, Marketing, and Support use cases.
+                        is_required: False
+                    deploy_trial_config:
+                        name: NPSP Trial Experience
+                    test_data_relationships:
+                        name: Set Default Relationship Settings
+                    deploy_reports:
+                        name: NPSP Reports & Dashboards
+                        is_required: False
